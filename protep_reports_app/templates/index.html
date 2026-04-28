@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Отчёты АО ПРОТЭП</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main class="container">
+    <header class="header">
+        <div>
+            <h1>Система формирования отчётов АО «ПРОТЭП»</h1>
+            <p>Веб-приложение с облачной базой данных и облачным хранением Excel-отчётов.</p>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <section class="messages">
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">{{ message }}</div>
+                {% endfor %}
+            </section>
+        {% endif %}
+    {% endwith %}
+
+    <section class="grid">
+        <div class="card">
+            <h2>Добавление объекта недвижимости</h2>
+            <form action="{{ url_for('add_object') }}" method="post" class="form">
+                <label>
+                    Название объекта
+                    <input type="text" name="name" placeholder="Например: Офисное помещение №1">
+                </label>
+
+                <label>
+                    Адрес
+                    <input type="text" name="address" placeholder="Например: г. Москва, ул. Ленина, д. 10">
+                </label>
+
+                <label>
+                    Площадь, м²
+                    <input type="text" name="area" placeholder="Например: 125.5">
+                </label>
+
+                <label>
+                    Статус
+                    <select name="status">
+                        <option value="">Выберите статус</option>
+                        <option value="Свободен">Свободен</option>
+                        <option value="В аренде">В аренде</option>
+                        <option value="На обслуживании">На обслуживании</option>
+                    </select>
+                </label>
+
+                <button type="submit">Добавить объект</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Формирование отчёта</h2>
+            <p>
+                При нажатии кнопки система получает данные из облачной базы,
+                формирует Excel-таблицу и загружает файл в облачное хранилище.
+            </p>
+            <form action="{{ url_for('generate_report') }}" method="post">
+                <button type="submit" class="secondary">Сформировать отчёт</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Объекты недвижимости</h2>
+        {% if objects %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Адрес</th>
+                        <th>Площадь</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for obj in objects %}
+                        <tr>
+                            <td>{{ obj.name }}</td>
+                            <td>{{ obj.address }}</td>
+                            <td>{{ obj.area }}</td>
+                            <td>{{ obj.status }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="empty">Объекты ещё не добавлены.</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Сформированные отчёты</h2>
+        {% if reports %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Файл</th>
+                        <th>Дата создания</th>
+                        <th>Ссылка</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for report in reports %}
+                        <tr>
+                            <td>{{ report.file_name }}</td>
+                            <td>{{ report.created_at[:19].replace("T", " ") if report.created_at else "" }}</td>
+                            <td><a href="{{ report.file_url }}" target="_blank">Открыть из облака</a></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="empty">Отчёты ещё не сформированы.</p>
+        {% endif %}
+    </section>
+</main>
+</body>
+</html>
