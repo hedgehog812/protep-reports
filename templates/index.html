@@ -10,7 +10,12 @@
     <header class="header">
         <div>
             <h1>Система формирования отчётов АО «ПРОТЭП»</h1>
-            <p>Веб-приложение с облачной базой данных и облачным хранением Excel-отчётов.</p>
+            <p>Веб-приложение с авторизацией, облачной базой данных и облачным хранением Excel-отчётов.</p>
+        </div>
+        <div class="user-panel">
+            <div>{{ user.display_name }}</div>
+            <span>Роль: {{ "Администратор" if user.role == "admin" else "Пользователь" }}</span>
+            <a href="{{ url_for('logout') }}">Выйти</a>
         </div>
     </header>
 
@@ -24,27 +29,15 @@
         {% endif %}
     {% endwith %}
 
-    <section class="grid">
+    {% if user.role == "admin" %}
+    <section class="grid three">
         <div class="card">
-            <h2>Добавление объекта недвижимости</h2>
+            <h2>Добавление объекта</h2>
             <form action="{{ url_for('add_object') }}" method="post" class="form">
-                <label>
-                    Название объекта
-                    <input type="text" name="name" placeholder="Например: Офисное помещение №1">
-                </label>
-
-                <label>
-                    Адрес
-                    <input type="text" name="address" placeholder="Например: г. Москва, ул. Ленина, д. 10">
-                </label>
-
-                <label>
-                    Площадь, м²
-                    <input type="text" name="area" placeholder="Например: 125.5">
-                </label>
-
-                <label>
-                    Статус
+                <label>Название объекта <input type="text" name="name" placeholder="Офисное помещение №1"></label>
+                <label>Адрес <input type="text" name="address" placeholder="г. Москва, ул. Ленина, д. 10"></label>
+                <label>Площадь, м² <input type="text" name="area" placeholder="125.5"></label>
+                <label>Статус
                     <select name="status">
                         <option value="">Выберите статус</option>
                         <option value="Свободен">Свободен</option>
@@ -52,75 +45,121 @@
                         <option value="На обслуживании">На обслуживании</option>
                     </select>
                 </label>
-
+                <label>Ответственный <input type="text" name="responsible_person" placeholder="Иванов И.И."></label>
                 <button type="submit">Добавить объект</button>
             </form>
         </div>
 
         <div class="card">
-            <h2>Формирование отчёта</h2>
-            <p>
-                При нажатии кнопки система получает данные из облачной базы,
-                формирует Excel-таблицу и загружает файл в облачное хранилище.
-            </p>
-            <form action="{{ url_for('generate_report') }}" method="post">
-                <button type="submit" class="secondary">Сформировать отчёт</button>
+            <h2>Добавление договора</h2>
+            <form action="{{ url_for('add_contract') }}" method="post" class="form">
+                <label>Объект
+                    <select name="object_id">
+                        <option value="">Выберите объект</option>
+                        {% for obj in objects %}<option value="{{ obj.id }}">{{ obj.name }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label>Контрагент / арендатор <input type="text" name="tenant_name" placeholder="ООО «Ромашка»"></label>
+                <label>Номер договора <input type="text" name="contract_number" placeholder="Д-001/2026"></label>
+                <label>Месячный платёж, руб. <input type="text" name="monthly_payment" placeholder="150000"></label>
+                <label>Дата начала <input type="date" name="start_date"></label>
+                <label>Дата окончания <input type="date" name="end_date"></label>
+                <label>Статус договора
+                    <select name="contract_status">
+                        <option value="">Выберите статус</option>
+                        <option value="Действует">Действует</option>
+                        <option value="Истекает">Истекает</option>
+                        <option value="Завершён">Завершён</option>
+                    </select>
+                </label>
+                <button type="submit">Добавить договор</button>
             </form>
         </div>
+
+        <div class="card">
+            <h2>Добавление заявки</h2>
+            <form action="{{ url_for('add_request') }}" method="post" class="form">
+                <label>Объект
+                    <select name="request_object_id">
+                        <option value="">Выберите объект</option>
+                        {% for obj in objects %}<option value="{{ obj.id }}">{{ obj.name }}</option>{% endfor %}
+                    </select>
+                </label>
+                <label>Тема заявки <input type="text" name="title" placeholder="Проверка инженерных систем"></label>
+                <label>Описание <textarea name="description" placeholder="Краткое описание проблемы"></textarea></label>
+                <label>Приоритет
+                    <select name="priority">
+                        <option value="">Выберите приоритет</option>
+                        <option value="Низкий">Низкий</option>
+                        <option value="Средний">Средний</option>
+                        <option value="Высокий">Высокий</option>
+                    </select>
+                </label>
+                <label>Статус заявки
+                    <select name="request_status">
+                        <option value="">Выберите статус</option>
+                        <option value="Новая">Новая</option>
+                        <option value="В работе">В работе</option>
+                        <option value="Закрыта">Закрыта</option>
+                    </select>
+                </label>
+                <button type="submit">Добавить заявку</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="card report-card">
+        <h2>Формирование расширенного отчёта</h2>
+        <p>Система формирует Excel-файл с несколькими листами: сводка, объекты, договоры и заявки.</p>
+        <form action="{{ url_for('generate_report') }}" method="post">
+            <button type="submit" class="secondary">Сформировать расширенный отчёт</button>
+        </form>
+    </section>
+    {% else %}
+    <section class="card"><h2>Режим просмотра</h2><p>Пользователь с ограниченными правами может просматривать данные и отчёты, но не может добавлять записи и формировать новые отчёты.</p></section>
+    {% endif %}
+
+    <section class="dashboard-grid">
+        <div class="metric-card"><span>Объекты</span><strong>{{ objects|length }}</strong></div>
+        <div class="metric-card"><span>Договоры</span><strong>{{ contracts|length }}</strong></div>
+        <div class="metric-card"><span>Заявки</span><strong>{{ service_requests|length }}</strong></div>
+        <div class="metric-card"><span>Отчёты</span><strong>{{ reports|length }}</strong></div>
     </section>
 
     <section class="card">
         <h2>Объекты недвижимости</h2>
         {% if objects %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Название</th>
-                        <th>Адрес</th>
-                        <th>Площадь</th>
-                        <th>Статус</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for obj in objects %}
-                        <tr>
-                            <td>{{ obj.name }}</td>
-                            <td>{{ obj.address }}</td>
-                            <td>{{ obj.area }}</td>
-                            <td>{{ obj.status }}</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p class="empty">Объекты ещё не добавлены.</p>
-        {% endif %}
+        <table><thead><tr><th>Название</th><th>Адрес</th><th>Площадь</th><th>Статус</th><th>Ответственный</th></tr></thead><tbody>
+        {% for obj in objects %}<tr><td>{{ obj.name }}</td><td>{{ obj.address }}</td><td>{{ obj.area }}</td><td>{{ obj.status }}</td><td>{{ obj.responsible_person or "" }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="empty">Объекты ещё не добавлены.</p>{% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Договоры</h2>
+        {% if contracts %}
+        <table><thead><tr><th>Объект</th><th>Арендатор</th><th>№ договора</th><th>Платёж</th><th>Срок</th><th>Статус</th></tr></thead><tbody>
+        {% for c in contracts %}<tr><td>{{ c.objects.name if c.objects else "" }}</td><td>{{ c.tenant_name }}</td><td>{{ c.contract_number }}</td><td>{{ c.monthly_payment }}</td><td>{{ c.start_date }} — {{ c.end_date }}</td><td>{{ c.status }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="empty">Договоры ещё не добавлены.</p>{% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Заявки на обслуживание</h2>
+        {% if service_requests %}
+        <table><thead><tr><th>Объект</th><th>Тема</th><th>Приоритет</th><th>Статус</th><th>Дата</th></tr></thead><tbody>
+        {% for r in service_requests %}<tr><td>{{ r.objects.name if r.objects else "" }}</td><td>{{ r.title }}</td><td>{{ r.priority }}</td><td>{{ r.status }}</td><td>{{ r.created_at[:10] if r.created_at else "" }}</td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="empty">Заявки ещё не добавлены.</p>{% endif %}
     </section>
 
     <section class="card">
         <h2>Сформированные отчёты</h2>
         {% if reports %}
-            <table>
-                <thead>
-                    <tr>
-                        <th>Файл</th>
-                        <th>Дата создания</th>
-                        <th>Ссылка</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for report in reports %}
-                        <tr>
-                            <td>{{ report.file_name }}</td>
-                            <td>{{ report.created_at[:19].replace("T", " ") if report.created_at else "" }}</td>
-                            <td><a href="{{ report.file_url }}" target="_blank">Открыть из облака</a></td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p class="empty">Отчёты ещё не сформированы.</p>
-        {% endif %}
+        <table><thead><tr><th>Файл</th><th>Тип</th><th>Создал</th><th>Дата создания</th><th>Ссылка</th></tr></thead><tbody>
+        {% for report in reports %}<tr><td>{{ report.file_name }}</td><td>{{ report.report_type or "" }}</td><td>{{ report.created_by or "" }}</td><td>{{ report.created_at[:19].replace("T", " ") if report.created_at else "" }}</td><td><a href="{{ report.file_url }}" target="_blank">Открыть из облака</a></td></tr>{% endfor %}
+        </tbody></table>
+        {% else %}<p class="empty">Отчёты ещё не сформированы.</p>{% endif %}
     </section>
 </main>
 </body>
