@@ -203,7 +203,16 @@ def add_object():
         flash(f"Ошибка при добавлении объекта: {error}", "error")
     return redirect(url_for("index"))
 
-
+@app.route("/objects/<int:object_id>/delete", methods=["POST"])
+@manager_required
+def delete_object(object_id):
+    try:
+        db().table("objects").delete().eq("id", object_id).execute()
+        flash("Объект недвижимости удалён. Связанные договоры и заявки также удалены.", "success")
+    except Exception as error:
+        flash(f"Ошибка при удалении объекта: {error}", "error")
+    return redirect(url_for("index"))
+    
 @app.route("/contracts", methods=["POST"])
 @manager_required
 def add_contract():
@@ -222,7 +231,16 @@ def add_contract():
         flash(f"Ошибка при добавлении договора: {error}", "error")
     return redirect(url_for("index"))
 
-
+@app.route("/contracts/<int:contract_id>/delete", methods=["POST"])
+@manager_required
+def delete_contract(contract_id):
+    try:
+        db().table("contracts").delete().eq("id", contract_id).execute()
+        flash("Договор удалён.", "success")
+    except Exception as error:
+        flash(f"Ошибка при удалении договора: {error}", "error")
+    return redirect(url_for("index"))
+    
 @app.route("/requests", methods=["POST"])
 @manager_required
 def add_request():
