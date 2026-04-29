@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>АО ПРОТЭП — заявки и отчёты</title>
+    <title>АО ПРОТЭП — отчёты и заявки</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -14,7 +14,12 @@
         </div>
         <div class="user-panel">
             <div>{{ user.display_name }}</div>
-            <span>Роль: {{ "Администратор" if user.role == "admin" else "Исполнитель" }}</span>
+            <span>
+                Роль:
+                {% if user.role == "admin" %}Администратор{% endif %}
+                {% if user.role == "manager" %}Менеджер заявок{% endif %}
+                {% if user.role == "user" %}Исполнитель{% endif %}
+            </span>
             <a href="{{ url_for('logout') }}">Выйти</a>
         </div>
     </header>
@@ -36,14 +41,20 @@
         <div class="metric-card"><span>Отчёты</span><strong>{{ reports|length }}</strong></div>
     </section>
 
-    {% if user.role == "admin" %}
+    {% if can_manage_records %}
     <section class="grid two">
         <div class="card">
-            <h2>Добавление объекта</h2>
+            <h2>Добавление объекта недвижимости</h2>
             <form action="{{ url_for('add_object') }}" method="post" class="form">
-                <label>Название объекта <input type="text" name="name" required></label>
-                <label>Адрес <input type="text" name="address" required></label>
-                <label>Площадь, м² <input type="text" name="area" required></label>
+                <label>Название объекта
+                    <input type="text" name="name" placeholder="Офисное помещение №1" required>
+                </label>
+                <label>Адрес
+                    <input type="text" name="address" placeholder="г. Москва, ул. Ленина, д. 10" required>
+                </label>
+                <label>Площадь, м²
+                    <input type="text" name="area" placeholder="125.5" required>
+                </label>
                 <label>Статус
                     <select name="status" required>
                         <option value="">Выберите статус</option>
@@ -52,7 +63,9 @@
                         <option value="На обслуживании">На обслуживании</option>
                     </select>
                 </label>
-                <label>Ответственный <input type="text" name="responsible_person"></label>
+                <label>Ответственный
+                    <input type="text" name="responsible_person" placeholder="Иванов И.И.">
+                </label>
                 <button type="submit">Добавить объект</button>
             </form>
         </div>
@@ -63,14 +76,26 @@
                 <label>Объект
                     <select name="object_id" required>
                         <option value="">Выберите объект</option>
-                        {% for obj in objects %}<option value="{{ obj.id }}">{{ obj.name }}</option>{% endfor %}
+                        {% for obj in objects %}
+                            <option value="{{ obj.id }}">{{ obj.name }}</option>
+                        {% endfor %}
                     </select>
                 </label>
-                <label>Контрагент / арендатор <input type="text" name="tenant_name" required></label>
-                <label>Номер договора <input type="text" name="contract_number" required></label>
-                <label>Месячный платёж, руб. <input type="text" name="monthly_payment" required></label>
-                <label>Дата начала <input type="date" name="start_date" required></label>
-                <label>Дата окончания <input type="date" name="end_date" required></label>
+                <label>Контрагент / арендатор
+                    <input type="text" name="tenant_name" placeholder="ООО «Ромашка»" required>
+                </label>
+                <label>Номер договора
+                    <input type="text" name="contract_number" placeholder="Д-001/2026" required>
+                </label>
+                <label>Месячный платёж, руб.
+                    <input type="text" name="monthly_payment" placeholder="150000" required>
+                </label>
+                <label>Дата начала
+                    <input type="date" name="start_date" required>
+                </label>
+                <label>Дата окончания
+                    <input type="date" name="end_date" required>
+                </label>
                 <label>Статус договора
                     <select name="contract_status" required>
                         <option value="">Выберите статус</option>
@@ -83,7 +108,6 @@
             </form>
         </div>
     </section>
-    {% endif %}
 
     <section class="card">
         <h2>Создание заявки на обслуживание</h2>
@@ -91,26 +115,35 @@
             <label>Объект
                 <select name="request_object_id" required>
                     <option value="">Выберите объект</option>
-                    {% for obj in objects %}<option value="{{ obj.id }}">{{ obj.name }}</option>{% endfor %}
+                    {% for obj in objects %}
+                        <option value="{{ obj.id }}">{{ obj.name }}</option>
+                    {% endfor %}
                 </select>
             </label>
-            <label>Тема заявки <input type="text" name="title" required></label>
+            <label>Тема заявки
+                <input type="text" name="title" placeholder="Проверка инженерных систем" required>
+            </label>
             <label>Срочность
                 <select name="priority" required>
-                    {% for priority in request_priorities %}<option value="{{ priority }}">{{ priority }}</option>{% endfor %}
+                    {% for priority in request_priorities %}
+                        <option value="{{ priority }}">{{ priority }}</option>
+                    {% endfor %}
                 </select>
             </label>
             <label>Статус
                 <select name="request_status" required>
-                    {% for status in request_statuses %}<option value="{{ status }}">{{ status }}</option>{% endfor %}
+                    {% for status in request_statuses %}
+                        <option value="{{ status }}">{{ status }}</option>
+                    {% endfor %}
                 </select>
             </label>
             <label class="wide">Описание
-     <textarea name="description"></textarea>
+                <textarea name="description" placeholder="Краткое описание задачи"></textarea>
+            </label>
             <button type="submit">Создать заявку</button>
-    </label>
         </form>
     </section>
+    {% endif %}
 
     <section class="card">
         <h2>Kanban-доска заявок</h2>
@@ -126,33 +159,45 @@
                     <div class="task-description">{{ req.description or "" }}</div>
 
                     <form action="{{ url_for('change_request_status', request_id=req.id) }}" method="post" class="status-actions">
-                        {% if req.status != "К выполнению" %}<button name="status" value="К выполнению" type="submit">К выполнению</button>{% endif %}
-                        {% if req.status != "В процессе" %}<button name="status" value="В процессе" type="submit">В процессе</button>{% endif %}
-                        {% if req.status != "Выполнено" %}<button name="status" value="Выполнено" type="submit">Выполнено</button>{% endif %}
+                        {% if req.status != "К выполнению" %}
+                            <button name="status" value="К выполнению" type="submit">К выполнению</button>
+                        {% endif %}
+                        {% if req.status != "В процессе" %}
+                            <button name="status" value="В процессе" type="submit">В процессе</button>
+                        {% endif %}
+                        {% if req.status != "Выполнено" %}
+                            <button name="status" value="Выполнено" type="submit">Выполнено</button>
+                        {% endif %}
                     </form>
 
+                    {% if can_manage_records %}
                     <details>
-                        <summary>Редактировать</summary>
+                        <summary>Редактировать заявку</summary>
                         <form action="{{ url_for('update_request', request_id=req.id) }}" method="post" class="form edit-form">
-                            <label>Тема <input type="text" name="title" value="{{ req.title }}" required></label>
+                            <label>Тема
+                                <input type="text" name="title" value="{{ req.title }}" required>
+                            </label>
                             <label>Срочность
                                 <select name="priority" required>
                                     {% for priority in request_priorities %}
-                                    <option value="{{ priority }}" {% if req.priority == priority %}selected{% endif %}>{{ priority }}</option>
+                                        <option value="{{ priority }}" {% if req.priority == priority %}selected{% endif %}>{{ priority }}</option>
                                     {% endfor %}
                                 </select>
                             </label>
                             <label>Статус
                                 <select name="status" required>
                                     {% for item_status in request_statuses %}
-                                    <option value="{{ item_status }}" {% if req.status == item_status %}selected{% endif %}>{{ item_status }}</option>
+                                        <option value="{{ item_status }}" {% if req.status == item_status %}selected{% endif %}>{{ item_status }}</option>
                                     {% endfor %}
                                 </select>
                             </label>
-                            <label>Описание <textarea name="description">{{ req.description or "" }}</textarea></label>
+                            <label>Описание
+                                <textarea name="description">{{ req.description or "" }}</textarea>
+                            </label>
                             <button type="submit">Сохранить</button>
                         </form>
                     </details>
+                    {% endif %}
                 </div>
                 {% else %}
                 <p class="empty small">Нет заявок</p>
@@ -162,7 +207,7 @@
         </div>
     </section>
 
-    {% if user.role == "admin" %}
+    {% if can_generate_reports %}
     <section class="card report-card">
         <h2>Формирование расширенного отчёта</h2>
         <p>Система формирует Excel-файл со сводкой, объектами, договорами и заявками.</p>
@@ -175,43 +220,107 @@
     <section class="card">
         <h2>Объекты недвижимости</h2>
         {% if objects %}
-        <table><thead><tr><th>Название</th><th>Адрес</th><th>Площадь</th><th>Статус</th><th>Ответственный</th></tr></thead><tbody>
-        {% for obj in objects %}<tr><td>{{ obj.name }}</td><td>{{ obj.address }}</td><td>{{ obj.area }}</td><td>{{ obj.status }}</td><td>{{ obj.responsible_person or "" }}</td></tr>{% endfor %}
-        </tbody></table>
-        {% else %}<p class="empty">Объекты ещё не добавлены.</p>{% endif %}
+        <table>
+            <thead>
+            <tr>
+                <th>Название</th>
+                <th>Адрес</th>
+                <th>Площадь</th>
+                <th>Статус</th>
+                <th>Ответственный</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for obj in objects %}
+            <tr>
+                <td>{{ obj.name }}</td>
+                <td>{{ obj.address }}</td>
+                <td>{{ obj.area }}</td>
+                <td>{{ obj.status }}</td>
+                <td>{{ obj.responsible_person or "" }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Объекты ещё не добавлены.</p>
+        {% endif %}
     </section>
 
     <section class="card">
         <h2>Договоры</h2>
         {% if contracts %}
-        <table><thead><tr><th>Объект</th><th>Арендатор</th><th>№ договора</th><th>Платёж</th><th>Срок</th><th>Статус</th></tr></thead><tbody>
-        {% for c in contracts %}<tr><td>{{ c.objects.name if c.objects else "" }}</td><td>{{ c.tenant_name }}</td><td>{{ c.contract_number }}</td><td>{{ c.monthly_payment }}</td><td>{{ c.start_date }} — {{ c.end_date }}</td><td>{{ c.status }}</td></tr>{% endfor %}
-        </tbody></table>
-        {% else %}<p class="empty">Договоры ещё не добавлены.</p>{% endif %}
+        <table>
+            <thead>
+            <tr>
+                <th>Объект</th>
+                <th>Арендатор</th>
+                <th>№ договора</th>
+                <th>Платёж</th>
+                <th>Срок</th>
+                <th>Статус</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for contract in contracts %}
+            <tr>
+                <td>{{ contract.objects.name if contract.objects else "" }}</td>
+                <td>{{ contract.tenant_name }}</td>
+                <td>{{ contract.contract_number }}</td>
+                <td>{{ contract.monthly_payment }}</td>
+                <td>{{ contract.start_date }} — {{ contract.end_date }}</td>
+                <td>{{ contract.status }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Договоры ещё не добавлены.</p>
+        {% endif %}
     </section>
 
     <section class="card">
         <h2>Сформированные отчёты</h2>
         {% if reports %}
-        <table><thead><tr><th>Файл</th><th>Тип</th><th>Создал</th><th>Дата</th><th>Ссылка</th>{% if user.role == "admin" %}<th>Действие</th>{% endif %}</tr></thead><tbody>
-        {% for report in reports %}
-        <tr>
-            <td>{{ report.file_name }}</td>
-            <td>{{ report.report_type or "" }}</td>
-            <td>{{ report.created_by or "" }}</td>
-            <td>{{ report.created_at[:19].replace("T", " ") if report.created_at else "" }}</td>
-            <td><a href="{{ report.file_url }}" target="_blank">Открыть из облака</a></td>
-            {% if user.role == "admin" %}
-            <td>
-                <form action="{{ url_for('delete_report', report_id=report.id) }}" method="post" onsubmit="return confirm('Удалить отчёт?');">
-                    <button type="submit" class="danger">Удалить</button>
-                </form>
-            </td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-        </tbody></table>
-        {% else %}<p class="empty">Отчёты ещё не сформированы.</p>{% endif %}
+        <table>
+            <thead>
+            <tr>
+                <th>Файл</th>
+                <th>Тип</th>
+                <th>Создал</th>
+                <th>Дата</th>
+                <th>Ссылка</th>
+                {% if can_manage_reports %}<th>Изменение</th><th>Удаление</th>{% endif %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for report in reports %}
+            <tr>
+                <td>{{ report.file_name }}</td>
+                <td>{{ report.report_type or "" }}</td>
+                <td>{{ report.created_by or "" }}</td>
+                <td>{{ report.created_at[:19].replace("T", " ") if report.created_at else "" }}</td>
+                <td><a href="{{ report.file_url }}" target="_blank">Открыть из облака</a></td>
+                {% if can_manage_reports %}
+                <td>
+                    <form action="{{ url_for('update_report', report_id=report.id) }}" method="post" class="inline-form">
+                        <input type="text" name="report_type" value="{{ report.report_type or 'Расширенный отчёт' }}">
+                        <button type="submit">Сохранить</button>
+                    </form>
+                </td>
+                <td>
+                    <form action="{{ url_for('delete_report', report_id=report.id) }}" method="post" onsubmit="return confirm('Удалить отчёт?');">
+                        <button type="submit" class="danger">Удалить</button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Отчёты ещё не сформированы.</p>
+        {% endif %}
     </section>
 </main>
 </body>

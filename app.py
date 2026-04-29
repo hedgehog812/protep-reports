@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from openpyxl import Workbook
@@ -10,24 +11,44 @@ from openpyxl.utils import get_column_letter
 from supabase import create_client
 
 load_dotenv()
+
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key-change-later")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "reports")
+
 TEMP_DIR = Path("generated_reports")
 TEMP_DIR.mkdir(exist_ok=True)
 
 USERS = {
-    "admin": {"password": "admin123", "role": "admin", "display_name": "Администратор"},
-    "user": {"password": "user123", "role": "user", "display_name": "Исполнитель"},
+    "admin": {
+        "password": "admin123",
+        "role": "admin",
+        "display_name": "Администратор",
+    },
+    "manager": {
+        "password": "manager123",
+        "role": "manager",
+        "display_name": "Менеджер заявок",
+    },
+    "user": {
+        "password": "user123",
+        "role": "user",
+        "display_name": "Исполнитель",
+    },
 }
+
+REQUEST_STATUSES = ["К выполнению", "В процессе", "Выполнено"]
+REQUEST_PRIORITIES = ["Низкий", "Средний", "Высокий", "Критический"]
+
 
 def db():
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise RuntimeError("Не заполнены SUPABASE_URL и SUPABASE_KEY.")
     return create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 def login_required(func):
     @wraps(func)
@@ -37,19 +58,27 @@ def login_required(func):
         return func(*args, **kwargs)
     return wrapper
 
-def admin_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if "username" not in session:
-            return redirect(url_for("login"))
-        if session.get("role") != "admin":
-            flash("Недостаточно прав для выполнения операции.", "error")
-            return redirect(url_for("index"))
-        return func(*args, **kwargs)
-    return wrapper
 
-REQUEST_STATUSES = ["К выполнению", "В процессе", "Выполнено"]
-REQUEST_PRIORITIES = ["Низкий", "Средний", "Высокий", "Критический"]
+def role_required(allowed_roles):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if "username" not in session:
+                return redirect(url_for("login"))
+            if session.get("role") not in allowed_roles:
+                flash("Недостаточно прав для выполнения операции.", "error")
+                return redirect(url_for("index"))
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+admin_required = role_required(["admin"])
+manager_required = role_required(["admin", "manager"])
+request_status_required = role_required(["admin", "manager", "user"])
+report_generate_required = role_required(["admin", "manager", "user"])
+report_manage_required = role_required(["admin", "manager"])
+
 
 def current_user():
     return {
@@ -58,51 +87,77 @@ def current_user():
         "display_name": session.get("display_name"),
     }
 
-def request_worker_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if "username" not in session:
-            return redirect(url_for("login"))
-        if session.get("role") not in ["admin", "user"]:
-            flash("Недостаточно прав для работы с заявками.", "error")
-            return redirect(url_for("index"))
-        return func(*args, **kwargs)
-    return wrapper
-
-def group_requests_by_status(items):
-    grouped = {status: [] for status in REQUEST_STATUSES}
-    for item in items:
-        grouped.setdefault(item.get("status", "К выполнению"), []).append(item)
-    return grouped
 
 def fetch_table(name):
     return db().table(name).select("*").order("created_at", desc=True).execute().data
 
+
 def fetch_contracts():
-    return db().table("contracts").select("*, objects(name, address)").order("created_at", desc=True).execute().data
+    return (
+        db()
+        .table("contracts")
+        .select("*, objects(name, address)")
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+
 
 def fetch_requests():
-    return db().table("service_requests").select("*, objects(name, address)").order("created_at", desc=True).execute().data
+    return (
+        db()
+        .table("service_requests")
+        .select("*, objects(name, address)")
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+
+
+def group_requests_by_status(requests_data):
+    grouped = {status: [] for status in REQUEST_STATUSES}
+    for item in requests_data:
+        grouped.setdefault(item.get("status", "К выполнению"), []).append(item)
+    return grouped
+
+
+def user_can_manage_records():
+    return session.get("role") in ["admin", "manager"]
+
+
+def user_can_manage_reports():
+    return session.get("role") in ["admin", "manager"]
+
+
+def user_can_generate_reports():
+    return session.get("role") in ["admin", "manager", "user"]
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
+
         user = USERS.get(username)
         if not user or user["password"] != password:
             flash("Неверный логин или пароль.", "error")
             return redirect(url_for("login"))
+
         session["username"] = username
         session["role"] = user["role"]
         session["display_name"] = user["display_name"]
+
         return redirect(url_for("index"))
+
     return render_template("login.html")
+
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
 
 @app.route("/")
 @login_required
@@ -115,10 +170,25 @@ def index():
     except Exception as error:
         objects, contracts, requests_data, reports = [], [], [], []
         flash(str(error), "error")
-    return render_template("index.html", objects=objects, contracts=contracts, service_requests=requests_data, requests_by_status=group_requests_by_status(requests_data), reports=reports, user=current_user(), request_statuses=REQUEST_STATUSES, request_priorities=REQUEST_PRIORITIES)
+
+    return render_template(
+        "index.html",
+        objects=objects,
+        contracts=contracts,
+        service_requests=requests_data,
+        requests_by_status=group_requests_by_status(requests_data),
+        reports=reports,
+        user=current_user(),
+        request_statuses=REQUEST_STATUSES,
+        request_priorities=REQUEST_PRIORITIES,
+        can_manage_records=user_can_manage_records(),
+        can_manage_reports=user_can_manage_reports(),
+        can_generate_reports=user_can_generate_reports(),
+    )
+
 
 @app.route("/objects", methods=["POST"])
-@admin_required
+@manager_required
 def add_object():
     try:
         db().table("objects").insert({
@@ -133,8 +203,9 @@ def add_object():
         flash(f"Ошибка при добавлении объекта: {error}", "error")
     return redirect(url_for("index"))
 
+
 @app.route("/contracts", methods=["POST"])
-@admin_required
+@manager_required
 def add_contract():
     try:
         db().table("contracts").insert({
@@ -151,8 +222,9 @@ def add_contract():
         flash(f"Ошибка при добавлении договора: {error}", "error")
     return redirect(url_for("index"))
 
+
 @app.route("/requests", methods=["POST"])
-@request_worker_required
+@manager_required
 def add_request():
     try:
         db().table("service_requests").insert({
@@ -165,25 +237,32 @@ def add_request():
             "updated_by": session.get("username"),
             "updated_at": datetime.now().isoformat(),
         }).execute()
-        flash("Заявка на обслуживание добавлена.", "success")
+        flash("Заявка добавлена.", "success")
     except Exception as error:
         flash(f"Ошибка при добавлении заявки: {error}", "error")
     return redirect(url_for("index"))
 
+
 @app.route("/requests/<int:request_id>/update", methods=["POST"])
-@request_worker_required
+@manager_required
 def update_request(request_id):
     try:
-        status = request.form.get("status", "").strip()
+        title = request.form.get("title", "").strip()
         priority = request.form.get("priority", "").strip()
+        status = request.form.get("status", "").strip()
+        description = request.form.get("description", "").strip()
 
-        if status not in REQUEST_STATUSES or priority not in REQUEST_PRIORITIES:
-            flash("Некорректный статус или срочность заявки.", "error")
+        if status not in REQUEST_STATUSES:
+            flash("Некорректный статус заявки.", "error")
+            return redirect(url_for("index"))
+
+        if priority not in REQUEST_PRIORITIES:
+            flash("Некорректный уровень срочности.", "error")
             return redirect(url_for("index"))
 
         db().table("service_requests").update({
-            "title": request.form.get("title", "").strip(),
-            "description": request.form.get("description", "").strip(),
+            "title": title,
+            "description": description,
             "priority": priority,
             "status": status,
             "updated_by": session.get("username"),
@@ -197,7 +276,7 @@ def update_request(request_id):
 
 
 @app.route("/requests/<int:request_id>/status", methods=["POST"])
-@request_worker_required
+@request_status_required
 def change_request_status(request_id):
     try:
         new_status = request.form.get("status", "").strip()
@@ -222,15 +301,19 @@ def style_sheet(ws):
     fill = PatternFill("solid", fgColor="D9EAF7")
     side = Side(style="thin", color="BFBFBF")
     border = Border(left=side, right=side, top=side, bottom=side)
+
     for row in ws.iter_rows():
         for cell in row:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
             if cell.row >= 4:
                 cell.border = border
-    for cell in ws[4]:
-        cell.font = Font(bold=True)
-        cell.fill = fill
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    if ws.max_row >= 4:
+        for cell in ws[4]:
+            cell.font = Font(bold=True)
+            cell.fill = fill
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
 
 def create_excel_report(objects, contracts, service_requests):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -238,8 +321,10 @@ def create_excel_report(objects, contracts, service_requests):
     file_path = TEMP_DIR / file_name
 
     wb = Workbook()
+
     ws = wb.active
     ws.title = "Сводка"
+
     total_area = sum(float(o.get("area") or 0) for o in objects)
     total_payment = sum(float(c.get("monthly_payment") or 0) for c in contracts)
     active_contracts = len([c for c in contracts if c.get("status") == "Действует"])
@@ -251,6 +336,7 @@ def create_excel_report(objects, contracts, service_requests):
     ws["A1"] = "Сводный отчёт по управлению недвижимым имуществом АО «ПРОТЭП»"
     ws["A1"].font = Font(size=14, bold=True)
     ws.merge_cells("A1:D1")
+
     rows = [
         ["Дата формирования", datetime.now().strftime("%d.%m.%Y %H:%M")],
         ["Количество объектов", len(objects)],
@@ -263,6 +349,7 @@ def create_excel_report(objects, contracts, service_requests):
         ["Выполненных заявок", requests_done],
         ["Критических заявок", critical_requests],
     ]
+
     for idx, row in enumerate(rows, 3):
         ws[f"A{idx}"] = row[0]
         ws[f"B{idx}"] = row[1]
@@ -273,8 +360,17 @@ def create_excel_report(objects, contracts, service_requests):
     ws_o["A1"] = "Объекты недвижимости"
     ws_o["A1"].font = Font(size=14, bold=True)
     ws_o.merge_cells("A1:G1")
+
     for i, o in enumerate(objects, 1):
-        ws_o.append([i, o.get("name",""), o.get("address",""), float(o.get("area") or 0), o.get("status",""), o.get("responsible_person",""), (o.get("created_at") or "")[:10]])
+        ws_o.append([
+            i,
+            o.get("name", ""),
+            o.get("address", ""),
+            float(o.get("area") or 0),
+            o.get("status", ""),
+            o.get("responsible_person", ""),
+            (o.get("created_at") or "")[:10],
+        ])
 
     ws_c = wb.create_sheet("Договоры")
     ws_c.append(["№", "Объект", "Арендатор", "№ договора", "Платёж, руб.", "Дата начала", "Дата окончания", "Статус"])
@@ -282,9 +378,19 @@ def create_excel_report(objects, contracts, service_requests):
     ws_c["A1"] = "Договоры"
     ws_c["A1"].font = Font(size=14, bold=True)
     ws_c.merge_cells("A1:H1")
+
     for i, c in enumerate(contracts, 1):
         obj = c.get("objects") or {}
-        ws_c.append([i, obj.get("name",""), c.get("tenant_name",""), c.get("contract_number",""), float(c.get("monthly_payment") or 0), c.get("start_date",""), c.get("end_date",""), c.get("status","")])
+        ws_c.append([
+            i,
+            obj.get("name", ""),
+            c.get("tenant_name", ""),
+            c.get("contract_number", ""),
+            float(c.get("monthly_payment") or 0),
+            c.get("start_date", ""),
+            c.get("end_date", ""),
+            c.get("status", ""),
+        ])
 
     ws_r = wb.create_sheet("Заявки")
     ws_r.append(["№", "Объект", "Тема", "Описание", "Срочность", "Статус", "Создал", "Обновил", "Дата создания"])
@@ -292,42 +398,64 @@ def create_excel_report(objects, contracts, service_requests):
     ws_r["A1"] = "Заявки на обслуживание"
     ws_r["A1"].font = Font(size=14, bold=True)
     ws_r.merge_cells("A1:I1")
+
     for i, r in enumerate(service_requests, 1):
         obj = r.get("objects") or {}
-        ws_r.append([i, obj.get("name",""), r.get("title",""), r.get("description",""), r.get("priority",""), r.get("status",""), r.get("created_by", ""), r.get("updated_by", ""), (r.get("created_at") or "")[:10]])
+        ws_r.append([
+            i,
+            obj.get("name", ""),
+            r.get("title", ""),
+            r.get("description", ""),
+            r.get("priority", ""),
+            r.get("status", ""),
+            r.get("created_by", ""),
+            r.get("updated_by", ""),
+            (r.get("created_at") or "")[:10],
+        ])
 
     for sheet in [ws, ws_o, ws_c, ws_r]:
         style_sheet(sheet)
         for col_idx in range(1, sheet.max_column + 1):
-            sheet.column_dimensions[get_column_letter(col_idx)].width = 24
+            letter = get_column_letter(col_idx)
+            sheet.column_dimensions[letter].width = 24
 
     wb.save(file_path)
     return file_name, file_path
 
+
 def upload_report(file_name, file_path):
     client = db()
     storage_path = f"reports/{file_name}"
+
     with open(file_path, "rb") as f:
         client.storage.from_(SUPABASE_BUCKET).upload(
             path=storage_path,
             file=f.read(),
-            file_options={"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "upsert": "true"},
+            file_options={
+                "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "upsert": "true",
+            },
         )
+
     file_url = client.storage.from_(SUPABASE_BUCKET).get_public_url(storage_path)
     return file_url, storage_path
 
+
 @app.route("/reports/generate", methods=["POST"])
-@admin_required
+@report_generate_required
 def generate_report():
     try:
         objects = fetch_table("objects")
         contracts = fetch_contracts()
         requests_data = fetch_requests()
+
         if not objects:
             flash("Нельзя сформировать отчёт: список объектов пуст.", "error")
             return redirect(url_for("index"))
+
         file_name, file_path = create_excel_report(objects, contracts, requests_data)
         file_url, storage_path = upload_report(file_name, file_path)
+
         db().table("reports").insert({
             "file_name": file_name,
             "file_url": file_url,
@@ -335,23 +463,44 @@ def generate_report():
             "report_type": "Расширенный отчёт",
             "created_by": session.get("username"),
         }).execute()
+
         flash("Расширенный Excel-отчёт сформирован и загружен в облако.", "success")
     except Exception as error:
         flash(f"Ошибка при формировании отчёта: {error}", "error")
     return redirect(url_for("index"))
 
 
+@app.route("/reports/<int:report_id>/update", methods=["POST"])
+@report_manage_required
+def update_report(report_id):
+    try:
+        report_type = request.form.get("report_type", "").strip() or "Расширенный отчёт"
+        db().table("reports").update({
+            "report_type": report_type,
+        }).eq("id", report_id).execute()
+        flash("Отчёт изменён.", "success")
+    except Exception as error:
+        flash(f"Ошибка при изменении отчёта: {error}", "error")
+    return redirect(url_for("index"))
+
+
 @app.route("/reports/<int:report_id>/delete", methods=["POST"])
-@admin_required
+@report_manage_required
 def delete_report(report_id):
     try:
         client = db()
-        result = client.table("reports").select("*").eq("id", report_id).single().execute()
-        report = result.data
+        report_result = client.table("reports").select("*").eq("id", report_id).single().execute()
+        report = report_result.data
 
-        if report and report.get("storage_path"):
+        if not report:
+            flash("Отчёт не найден.", "error")
+            return redirect(url_for("index"))
+
+        storage_path = report.get("storage_path")
+
+        if storage_path:
             try:
-                client.storage.from_(SUPABASE_BUCKET).remove([report.get("storage_path")])
+                client.storage.from_(SUPABASE_BUCKET).remove([storage_path])
             except Exception:
                 pass
 
@@ -360,6 +509,7 @@ def delete_report(report_id):
     except Exception as error:
         flash(f"Ошибка при удалении отчёта: {error}", "error")
     return redirect(url_for("index"))
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
