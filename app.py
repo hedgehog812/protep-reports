@@ -76,8 +76,8 @@ def role_required(allowed_roles):
 admin_required = role_required(["admin"])
 manager_required = role_required(["admin", "manager"])
 request_status_required = role_required(["admin", "manager", "user"])
-report_generate_required = role_required(["admin", "manager", "user"])
-report_manage_required = role_required(["admin", "manager"])
+report_generate_required = role_required(["admin", "manager"])
+report_manage_required = role_required(["admin"])
 
 
 def current_user():
@@ -114,6 +114,18 @@ def fetch_requests():
     )
 
 
+def fetch_completed_requests():
+    return (
+        db()
+        .table("service_requests")
+        .select("*, objects(name, address)")
+        .eq("status", "Выполнено")
+        .order("updated_at", desc=True)
+        .execute()
+        .data
+    )
+
+
 def group_requests_by_status(requests_data):
     grouped = {status: [] for status in REQUEST_STATUSES}
     for item in requests_data:
@@ -126,11 +138,11 @@ def user_can_manage_records():
 
 
 def user_can_manage_reports():
-    return session.get("role") in ["admin", "manager"]
+    return session.get("role") in ["admin"]
 
 
 def user_can_generate_reports():
-    return session.get("role") in ["admin", "manager", "user"]
+    return session.get("role") in ["admin", "manager"]
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -203,6 +215,7 @@ def add_object():
         flash(f"Ошибка при добавлении объекта: {error}", "error")
     return redirect(url_for("index"))
 
+
 @app.route("/objects/<int:object_id>/delete", methods=["POST"])
 @manager_required
 def delete_object(object_id):
@@ -212,7 +225,8 @@ def delete_object(object_id):
     except Exception as error:
         flash(f"Ошибка при удалении объекта: {error}", "error")
     return redirect(url_for("index"))
-    
+
+
 @app.route("/contracts", methods=["POST"])
 @manager_required
 def add_contract():
@@ -231,6 +245,7 @@ def add_contract():
         flash(f"Ошибка при добавлении договора: {error}", "error")
     return redirect(url_for("index"))
 
+
 @app.route("/contracts/<int:contract_id>/delete", methods=["POST"])
 @manager_required
 def delete_contract(contract_id):
@@ -240,7 +255,8 @@ def delete_contract(contract_id):
     except Exception as error:
         flash(f"Ошибка при удалении договора: {error}", "error")
     return redirect(url_for("index"))
-    
+
+
 @app.route("/requests", methods=["POST"])
 @manager_required
 def add_request():
@@ -335,93 +351,62 @@ def style_sheet(ws):
 
 def create_excel_report(objects, contracts, service_requests):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_name = f"protep_extended_report_{timestamp}.xlsx"
+    report_date = datetime.now().strftime("%d.%m.%Y")
+    file_name = f"protep_daily_completed_requests_{timestamp}.xlsx"
     file_path = TEMP_DIR / file_name
 
     wb = Workbook()
 
     ws = wb.active
-    ws.title = "Сводка"
+    ws.title = "Итоги дня"
 
-    total_area = sum(float(o.get("area") or 0) for o in objects)
-    total_payment = sum(float(c.get("monthly_payment") or 0) for c in contracts)
-    active_contracts = len([c for c in contracts if c.get("status") == "Действует"])
-    requests_todo = len([r for r in service_requests if r.get("status") == "К выполнению"])
-    requests_progress = len([r for r in service_requests if r.get("status") == "В процессе"])
-    requests_done = len([r for r in service_requests if r.get("status") == "Выполнено"])
-    critical_requests = len([r for r in service_requests if r.get("priority") == "Критический"])
+    completed_requests = [r for r in service_requests if r.get("status") == "Выполнено"]
+    critical_completed = [r for r in completed_requests if r.get("priority") == "Критический"]
+    high_completed = [r for r in completed_requests if r.get("priority") == "Высокий"]
 
-    ws["A1"] = "Сводный отчёт по управлению недвижимым имуществом АО «ПРОТЭП»"
+    ws["A1"] = "Дневной отчёт по выполненным заявкам АО «ПРОТЭП»"
     ws["A1"].font = Font(size=14, bold=True)
     ws.merge_cells("A1:D1")
 
     rows = [
         ["Дата формирования", datetime.now().strftime("%d.%m.%Y %H:%M")],
-        ["Количество объектов", len(objects)],
-        ["Общая площадь, м²", total_area],
-        ["Количество договоров", len(contracts)],
-        ["Действующих договоров", active_contracts],
-        ["Плановый месячный доход, руб.", total_payment],
-        ["Заявок к выполнению", requests_todo],
-        ["Заявок в процессе", requests_progress],
-        ["Выполненных заявок", requests_done],
-        ["Критических заявок", critical_requests],
+        ["Отчётный день", report_date],
+        ["Количество выполненных заявок", len(completed_requests)],
+        ["Критических выполненных заявок", len(critical_completed)],
+        ["Высокоприоритетных выполненных заявок", len(high_completed)],
+        ["Количество объектов в системе", len(objects)],
+        ["Количество договоров в системе", len(contracts)],
     ]
 
     for idx, row in enumerate(rows, 3):
         ws[f"A{idx}"] = row[0]
         ws[f"B{idx}"] = row[1]
 
-    ws_o = wb.create_sheet("Объекты")
-    ws_o.append(["№", "Название", "Адрес", "Площадь, м²", "Статус", "Ответственный", "Дата добавления"])
-    ws_o.insert_rows(1, 3)
-    ws_o["A1"] = "Объекты недвижимости"
-    ws_o["A1"].font = Font(size=14, bold=True)
-    ws_o.merge_cells("A1:G1")
+    ws_done = wb.create_sheet("Выполненные заявки")
+    ws_done.append([
+        "№",
+        "Объект",
+        "Адрес объекта",
+        "Тема заявки",
+        "Описание",
+        "Срочность",
+        "Статус",
+        "Создал",
+        "Обновил",
+        "Дата создания",
+        "Дата обновления",
+    ])
+    ws_done.insert_rows(1, 3)
+    ws_done["A1"] = "Заявки, выполненные за день"
+    ws_done["A1"].font = Font(size=14, bold=True)
+    ws_done.merge_cells("A1:K1")
 
-    for i, o in enumerate(objects, 1):
-        ws_o.append([
-            i,
-            o.get("name", ""),
-            o.get("address", ""),
-            float(o.get("area") or 0),
-            o.get("status", ""),
-            o.get("responsible_person", ""),
-            (o.get("created_at") or "")[:10],
-        ])
-
-    ws_c = wb.create_sheet("Договоры")
-    ws_c.append(["№", "Объект", "Арендатор", "№ договора", "Платёж, руб.", "Дата начала", "Дата окончания", "Статус"])
-    ws_c.insert_rows(1, 3)
-    ws_c["A1"] = "Договоры"
-    ws_c["A1"].font = Font(size=14, bold=True)
-    ws_c.merge_cells("A1:H1")
-
-    for i, c in enumerate(contracts, 1):
-        obj = c.get("objects") or {}
-        ws_c.append([
-            i,
-            obj.get("name", ""),
-            c.get("tenant_name", ""),
-            c.get("contract_number", ""),
-            float(c.get("monthly_payment") or 0),
-            c.get("start_date", ""),
-            c.get("end_date", ""),
-            c.get("status", ""),
-        ])
-
-    ws_r = wb.create_sheet("Заявки")
-    ws_r.append(["№", "Объект", "Тема", "Описание", "Срочность", "Статус", "Создал", "Обновил", "Дата создания"])
-    ws_r.insert_rows(1, 3)
-    ws_r["A1"] = "Заявки на обслуживание"
-    ws_r["A1"].font = Font(size=14, bold=True)
-    ws_r.merge_cells("A1:I1")
-
-    for i, r in enumerate(service_requests, 1):
+    for i, r in enumerate(completed_requests, 1):
         obj = r.get("objects") or {}
-        ws_r.append([
+        ws_done.append([
             i,
             obj.get("name", ""),
+            obj.get("address", ""),
             r.get("title", ""),
             r.get("description", ""),
             r.get("priority", ""),
@@ -429,9 +414,27 @@ def create_excel_report(objects, contracts, service_requests):
             r.get("created_by", ""),
             r.get("updated_by", ""),
             (r.get("created_at") or "")[:10],
+            (r.get("updated_at") or "")[:19].replace("T", " "),
         ])
 
-    for sheet in [ws, ws_o, ws_c, ws_r]:
+    ws_objects = wb.create_sheet("Объекты")
+    ws_objects.append(["№", "Название", "Адрес", "Площадь, м²", "Статус", "Ответственный"])
+    ws_objects.insert_rows(1, 3)
+    ws_objects["A1"] = "Объекты недвижимости"
+    ws_objects["A1"].font = Font(size=14, bold=True)
+    ws_objects.merge_cells("A1:F1")
+
+    for i, o in enumerate(objects, 1):
+        ws_objects.append([
+            i,
+            o.get("name", ""),
+            o.get("address", ""),
+            float(o.get("area") or 0),
+            o.get("status", ""),
+            o.get("responsible_person", ""),
+        ])
+
+    for sheet in [ws, ws_done, ws_objects]:
         style_sheet(sheet)
         for col_idx in range(1, sheet.max_column + 1):
             letter = get_column_letter(col_idx)
@@ -465,26 +468,31 @@ def generate_report():
     try:
         objects = fetch_table("objects")
         contracts = fetch_contracts()
-        requests_data = fetch_requests()
+        completed_requests = fetch_completed_requests()
 
-        if not objects:
-            flash("Нельзя сформировать отчёт: список объектов пуст.", "error")
+        if not completed_requests:
+            flash("Нельзя сформировать дневной отчёт: в колонке «Выполнено» нет заявок.", "error")
             return redirect(url_for("index"))
 
-        file_name, file_path = create_excel_report(objects, contracts, requests_data)
+        file_name, file_path = create_excel_report(objects, contracts, completed_requests)
         file_url, storage_path = upload_report(file_name, file_path)
 
         db().table("reports").insert({
             "file_name": file_name,
             "file_url": file_url,
             "storage_path": storage_path,
-            "report_type": "Расширенный отчёт",
+            "report_type": "Дневной отчёт по выполненным заявкам",
             "created_by": session.get("username"),
         }).execute()
 
-        flash("Расширенный Excel-отчёт сформирован и загружен в облако.", "success")
+        for item in completed_requests:
+            db().table("service_requests").delete().eq("id", item["id"]).execute()
+
+        flash("Дневной отчёт сформирован. Колонка «Выполнено» очищена.", "success")
+
     except Exception as error:
         flash(f"Ошибка при формировании отчёта: {error}", "error")
+
     return redirect(url_for("index"))
 
 
@@ -492,7 +500,7 @@ def generate_report():
 @report_manage_required
 def update_report(report_id):
     try:
-        report_type = request.form.get("report_type", "").strip() or "Расширенный отчёт"
+        report_type = request.form.get("report_type", "").strip() or "Дневной отчёт по выполненным заявкам"
         db().table("reports").update({
             "report_type": report_type,
         }).eq("id", report_id).execute()
