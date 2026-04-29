@@ -220,9 +220,11 @@ def create_excel_report(objects, contracts, service_requests):
         ws_r.append([i, obj.get("name",""), r.get("title",""), r.get("description",""), r.get("priority",""), r.get("status",""), (r.get("created_at") or "")[:10]])
 
     for sheet in [ws, ws_o, ws_c, ws_r]:
-        style_sheet(sheet)
-        for col in sheet.columns:
-            sheet.column_dimensions[col[0].column_letter].width = 24
+    style_sheet(sheet)
+
+    for column_index in range(1, sheet.max_column + 1):
+        column_letter = sheet.cell(row=4, column=column_index).column_letter
+        sheet.column_dimensions[column_letter].width = 24
 
     wb.save(file_path)
     return file_name, file_path
