@@ -352,7 +352,7 @@ def style_sheet(ws):
 def create_excel_report(objects, contracts, service_requests):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_date = datetime.now().strftime("%d.%m.%Y")
-    file_name = f"protep_daily_completed_requests_{timestamp}.xlsx"
+    file_name = f"protep_daily_{timestamp}.xlsx"
     file_path = TEMP_DIR / file_name
 
     wb = Workbook()
