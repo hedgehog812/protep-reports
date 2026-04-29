@@ -2,19 +2,23 @@ import os
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 from supabase import create_client
 
 load_dotenv()
+
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key-change-later")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "reports")
+
 TEMP_DIR = Path("generated_reports")
 TEMP_DIR.mkdir(exist_ok=True)
 
@@ -94,7 +98,14 @@ def index():
     except Exception as error:
         objects, contracts, requests_data, reports = [], [], [], []
         flash(str(error), "error")
-    return render_template("index.html", objects=objects, contracts=contracts, service_requests=requests_data, reports=reports, user=current_user())
+    return render_template(
+        "index.html",
+        objects=objects,
+        contracts=contracts,
+        service_requests=requests_data,
+        reports=reports,
+        user=current_user()
+    )
 
 @app.route("/objects", methods=["POST"])
 @admin_required
@@ -168,6 +179,7 @@ def create_excel_report(objects, contracts, service_requests):
     wb = Workbook()
     ws = wb.active
     ws.title = "Сводка"
+
     total_area = sum(float(o.get("area") or 0) for o in objects)
     total_payment = sum(float(c.get("monthly_payment") or 0) for c in contracts)
     active_contracts = len([c for c in contracts if c.get("status") == "Действует"])
@@ -176,6 +188,7 @@ def create_excel_report(objects, contracts, service_requests):
     ws["A1"] = "Сводный отчёт по управлению недвижимым имуществом АО «ПРОТЭП»"
     ws["A1"].font = Font(size=14, bold=True)
     ws.merge_cells("A1:D1")
+
     rows = [
         ["Дата формирования", datetime.now().strftime("%d.%m.%Y %H:%M")],
         ["Количество объектов", len(objects)],
@@ -186,6 +199,7 @@ def create_excel_report(objects, contracts, service_requests):
         ["Количество заявок", len(service_requests)],
         ["Открытых заявок", open_requests],
     ]
+
     for idx, row in enumerate(rows, 3):
         ws[f"A{idx}"] = row[0]
         ws[f"B{idx}"] = row[1]
@@ -196,8 +210,17 @@ def create_excel_report(objects, contracts, service_requests):
     ws_o["A1"] = "Объекты недвижимости"
     ws_o["A1"].font = Font(size=14, bold=True)
     ws_o.merge_cells("A1:G1")
+
     for i, o in enumerate(objects, 1):
-        ws_o.append([i, o.get("name",""), o.get("address",""), float(o.get("area") or 0), o.get("status",""), o.get("responsible_person",""), (o.get("created_at") or "")[:10]])
+        ws_o.append([
+            i,
+            o.get("name",""),
+            o.get("address",""),
+            float(o.get("area") or 0),
+            o.get("status",""),
+            o.get("responsible_person",""),
+            (o.get("created_at") or "")[:10]
+        ])
 
     ws_c = wb.create_sheet("Договоры")
     ws_c.append(["№", "Объект", "Арендатор", "№ договора", "Платёж, руб.", "Дата начала", "Дата окончания", "Статус"])
@@ -205,9 +228,19 @@ def create_excel_report(objects, contracts, service_requests):
     ws_c["A1"] = "Договоры"
     ws_c["A1"].font = Font(size=14, bold=True)
     ws_c.merge_cells("A1:H1")
+
     for i, c in enumerate(contracts, 1):
         obj = c.get("objects") or {}
-        ws_c.append([i, obj.get("name",""), c.get("tenant_name",""), c.get("contract_number",""), float(c.get("monthly_payment") or 0), c.get("start_date",""), c.get("end_date",""), c.get("status","")])
+        ws_c.append([
+            i,
+            obj.get("name",""),
+            c.get("tenant_name",""),
+            c.get("contract_number",""),
+            float(c.get("monthly_payment") or 0),
+            c.get("start_date",""),
+            c.get("end_date",""),
+            c.get("status","")
+        ])
 
     ws_r = wb.create_sheet("Заявки")
     ws_r.append(["№", "Объект", "Тема", "Описание", "Приоритет", "Статус", "Дата создания"])
@@ -215,16 +248,24 @@ def create_excel_report(objects, contracts, service_requests):
     ws_r["A1"] = "Заявки на обслуживание"
     ws_r["A1"].font = Font(size=14, bold=True)
     ws_r.merge_cells("A1:G1")
+
     for i, r in enumerate(service_requests, 1):
         obj = r.get("objects") or {}
-        ws_r.append([i, obj.get("name",""), r.get("title",""), r.get("description",""), r.get("priority",""), r.get("status",""), (r.get("created_at") or "")[:10]])
+        ws_r.append([
+            i,
+            obj.get("name",""),
+            r.get("title",""),
+            r.get("description",""),
+            r.get("priority",""),
+            r.get("status",""),
+            (r.get("created_at") or "")[:10]
+        ])
 
     for sheet in [ws, ws_o, ws_c, ws_r]:
-    style_sheet(sheet)
-
-    for column_index in range(1, sheet.max_column + 1):
-        column_letter = sheet.cell(row=4, column=column_index).column_letter
-        sheet.column_dimensions[column_letter].width = 24
+        style_sheet(sheet)
+        for col_idx in range(1, sheet.max_column + 1):
+            letter = get_column_letter(col_idx)
+            sheet.column_dimensions[letter].width = 24
 
     wb.save(file_path)
     return file_name, file_path
@@ -236,7 +277,10 @@ def upload_report(file_name, file_path):
         client.storage.from_(SUPABASE_BUCKET).upload(
             path=storage_path,
             file=f.read(),
-            file_options={"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "upsert": "true"},
+            file_options={
+                "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "upsert": "true"
+            },
         )
     return client.storage.from_(SUPABASE_BUCKET).get_public_url(storage_path)
 
@@ -247,20 +291,26 @@ def generate_report():
         objects = fetch_table("objects")
         contracts = fetch_contracts()
         requests_data = fetch_requests()
+
         if not objects:
             flash("Нельзя сформировать отчёт: список объектов пуст.", "error")
             return redirect(url_for("index"))
+
         file_name, file_path = create_excel_report(objects, contracts, requests_data)
         file_url = upload_report(file_name, file_path)
+
         db().table("reports").insert({
             "file_name": file_name,
             "file_url": file_url,
             "report_type": "Расширенный отчёт",
             "created_by": session.get("username"),
         }).execute()
+
         flash("Расширенный Excel-отчёт сформирован и загружен в облако.", "success")
+
     except Exception as error:
         flash(f"Ошибка при формировании отчёта: {error}", "error")
+
     return redirect(url_for("index"))
 
 if __name__ == "__main__":
