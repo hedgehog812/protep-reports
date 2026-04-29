@@ -216,6 +216,24 @@ def add_object():
     return redirect(url_for("index"))
 
 
+@app.route("/objects/<int:object_id>/update", methods=["POST"])
+@manager_required
+def update_object(object_id):
+    try:
+        db().table("objects").update({
+            "name": request.form["name"].strip(),
+            "address": request.form["address"].strip(),
+            "area": float(request.form["area"].replace(",", ".")),
+            "status": request.form["status"],
+            "responsible_person": request.form.get("responsible_person", "").strip(),
+        }).eq("id", object_id).execute()
+
+        flash("Объект недвижимости обновлён.", "success")
+    except Exception as error:
+        flash(f"Ошибка при обновлении объекта: {error}", "error")
+    return redirect(url_for("index"))
+
+
 @app.route("/objects/<int:object_id>/delete", methods=["POST"])
 @manager_required
 def delete_object(object_id):
@@ -243,6 +261,26 @@ def add_contract():
         flash("Договор добавлен.", "success")
     except Exception as error:
         flash(f"Ошибка при добавлении договора: {error}", "error")
+    return redirect(url_for("index"))
+
+
+@app.route("/contracts/<int:contract_id>/update", methods=["POST"])
+@manager_required
+def update_contract(contract_id):
+    try:
+        db().table("contracts").update({
+            "object_id": int(request.form["object_id"]),
+            "tenant_name": request.form["tenant_name"].strip(),
+            "contract_number": request.form["contract_number"].strip(),
+            "monthly_payment": float(request.form["monthly_payment"].replace(",", ".")),
+            "start_date": request.form["start_date"],
+            "end_date": request.form["end_date"],
+            "status": request.form["status"],
+        }).eq("id", contract_id).execute()
+
+        flash("Договор обновлён.", "success")
+    except Exception as error:
+        flash(f"Ошибка при обновлении договора: {error}", "error")
     return redirect(url_for("index"))
 
 
@@ -331,6 +369,17 @@ def change_request_status(request_id):
     return redirect(url_for("index"))
 
 
+@app.route("/requests/<int:request_id>/delete", methods=["POST"])
+@manager_required
+def delete_request(request_id):
+    try:
+        db().table("service_requests").delete().eq("id", request_id).execute()
+        flash("Заявка удалена.", "success")
+    except Exception as error:
+        flash(f"Ошибка при удалении заявки: {error}", "error")
+    return redirect(url_for("index"))
+
+
 def style_sheet(ws):
     fill = PatternFill("solid", fgColor="D9EAF7")
     side = Side(style="thin", color="BFBFBF")
@@ -352,13 +401,14 @@ def style_sheet(ws):
 def create_excel_report(objects, contracts, service_requests):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_date = datetime.now().strftime("%d.%m.%Y")
-    file_name = f"protep_daily_{timestamp}.xlsx"
+    file_name = f"protep_daily_completed_requests_{timestamp}.xlsx"
     file_path = TEMP_DIR / file_name
 
     wb = Workbook()
+    default_sheet = wb.active
+    wb.remove(default_sheet)
 
-    ws = wb.active
-    ws.title = "Итоги дня"
+    ws = wb.create_sheet("Итоги дня")
 
     completed_requests = [r for r in service_requests if r.get("status") == "Выполнено"]
     critical_completed = [r for r in completed_requests if r.get("priority") == "Критический"]
