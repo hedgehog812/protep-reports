@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>АО ПРОТЭП — отчёты и заявки</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main class="container">
+    <header class="header">
+        <div>
+            <h1>Система управления заявками и отчётами АО «ПРОТЭП»</h1>
+            <p>Веб-приложение с облачной базой данных, Kanban-доской и облачным хранением Excel-отчётов.</p>
+        </div>
+        <div class="user-panel">
+            <div>{{ user.display_name }}</div>
+            <span>
+                Роль:
+                {% if user.role == "admin" %}Администратор{% endif %}
+                {% if user.role == "manager" %}Менеджер заявок{% endif %}
+                {% if user.role == "user" %}Исполнитель{% endif %}
+            </span>
+            <a href="{{ url_for('logout') }}">Выйти</a>
+        </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <section class="messages">
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">{{ message }}</div>
+                {% endfor %}
+            </section>
+        {% endif %}
+    {% endwith %}
+
+    <section class="dashboard-grid">
+        <div class="metric-card"><span>Объекты</span><strong>{{ objects|length }}</strong></div>
+        <div class="metric-card"><span>Договоры</span><strong>{{ contracts|length }}</strong></div>
+        <div class="metric-card"><span>Заявки</span><strong>{{ service_requests|length }}</strong></div>
+        <div class="metric-card"><span>Отчёты</span><strong>{{ reports|length }}</strong></div>
+    </section>
+
+    {% if can_manage_records %}
+    <section class="grid two">
+        <div class="card">
+            <h2>Добавление объекта недвижимости</h2>
+            <form action="{{ url_for('add_object') }}" method="post" class="form">
+                <label>Название объекта
+                    <input type="text" name="name" placeholder="Офисное помещение №1" required>
+                </label>
+                <label>Адрес
+                    <input type="text" name="address" placeholder="г. Москва, ул. Ленина, д. 10" required>
+                </label>
+                <label>Площадь, м²
+                    <input type="text" name="area" placeholder="125.5" required>
+                </label>
+                <label>Статус
+                    <select name="status" required>
+                        <option value="">Выберите статус</option>
+                        <option value="Свободен">Свободен</option>
+                        <option value="В аренде">В аренде</option>
+                        <option value="На обслуживании">На обслуживании</option>
+                    </select>
+                </label>
+                <label>Ответственный
+                    <input type="text" name="responsible_person" placeholder="Иванов И.И.">
+                </label>
+                <button type="submit">Добавить объект</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Добавление договора</h2>
+            <form action="{{ url_for('add_contract') }}" method="post" class="form">
+                <label>Объект
+                    <select name="object_id" required>
+                        <option value="">Выберите объект</option>
+                        {% for obj in objects %}
+                            <option value="{{ obj.id }}">{{ obj.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>Контрагент / арендатор
+                    <input type="text" name="tenant_name" placeholder="ООО «Ромашка»" required>
+                </label>
+                <label>Номер договора
+                    <input type="text" name="contract_number" placeholder="Д-001/2026" required>
+                </label>
+                <label>Месячный платёж, руб.
+                    <input type="text" name="monthly_payment" placeholder="150000" required>
+                </label>
+                <label>Дата начала
+                    <input type="date" name="start_date" required>
+                </label>
+                <label>Дата окончания
+                    <input type="date" name="end_date" required>
+                </label>
+                <label>Статус договора
+                    <select name="contract_status" required>
+                        <option value="">Выберите статус</option>
+                        <option value="Действует">Действует</option>
+                        <option value="Истекает">Истекает</option>
+                        <option value="Завершён">Завершён</option>
+                    </select>
+                </label>
+                <button type="submit">Добавить договор</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Создание заявки на обслуживание</h2>
+        <form action="{{ url_for('add_request') }}" method="post" class="form compact-grid">
+            <label>Объект
+                <select name="request_object_id" required>
+                    <option value="">Выберите объект</option>
+                    {% for obj in objects %}
+                        <option value="{{ obj.id }}">{{ obj.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Тема заявки
+                <input type="text" name="title" placeholder="Проверка инженерных систем" required>
+            </label>
+            <label>Срочность
+                <select name="priority" required>
+                    {% for priority in request_priorities %}
+                        <option value="{{ priority }}">{{ priority }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Статус
+                <select name="request_status" required>
+                    {% for status in request_statuses %}
+                        <option value="{{ status }}">{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="wide">Описание
+                <textarea name="description" placeholder="Краткое описание задачи"></textarea>
+            </label>
+            <button type="submit">Создать заявку</button>
+        </form>
+    </section>
+    {% endif %}
+
+    <section class="card">
+        <h2>Kanban-доска заявок</h2>
+        <div class="kanban">
+            {% for status in request_statuses %}
+            <div class="kanban-column">
+                <h3>{{ status }}</h3>
+                {% for req in requests_by_status[status] %}
+                <div class="task-card priority-{{ req.priority|lower }}">
+                    <div class="task-title">{{ req.title }}</div>
+                    <div class="task-object">{{ req.objects.name if req.objects else "Объект не указан" }}</div>
+                    <div class="task-priority">Срочность: {{ req.priority }}</div>
+                    <div class="task-description">{{ req.description or "" }}</div>
+
+                    <form action="{{ url_for('change_request_status', request_id=req.id) }}" method="post" class="status-actions">
+                        {% if req.status != "К выполнению" %}
+                            <button name="status" value="К выполнению" type="submit">К выполнению</button>
+                        {% endif %}
+                        {% if req.status != "В процессе" %}
+                            <button name="status" value="В процессе" type="submit">В процессе</button>
+                        {% endif %}
+                        {% if req.status != "Выполнено" %}
+                            <button name="status" value="Выполнено" type="submit">Выполнено</button>
+                        {% endif %}
+                    </form>
+
+                    {% if can_manage_records %}
+                    <details>
+                        <summary>Редактировать заявку</summary>
+                        <form action="{{ url_for('update_request', request_id=req.id) }}" method="post" class="form edit-form">
+                            <label>Тема
+                                <input type="text" name="title" value="{{ req.title }}" required>
+                            </label>
+                            <label>Срочность
+                                <select name="priority" required>
+                                    {% for priority in request_priorities %}
+                                        <option value="{{ priority }}" {% if req.priority == priority %}selected{% endif %}>{{ priority }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label>Статус
+                                <select name="status" required>
+                                    {% for item_status in request_statuses %}
+                                        <option value="{{ item_status }}" {% if req.status == item_status %}selected{% endif %}>{{ item_status }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label>Описание
+                                <textarea name="description">{{ req.description or "" }}</textarea>
+                            </label>
+                            <button type="submit">Сохранить</button>
+                        </form>
+                    </details>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="empty small">Нет заявок</p>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if can_generate_reports %}
+    <section class="card report-card">
+        <h2>Формирование дневного отчёта</h2>
+        <p>Система формирует Excel-файл по заявкам из колонки «Выполнено», после чего очищает эту колонку Kanban-доски.</p>
+        <form action="{{ url_for('generate_report') }}" method="post">
+            <button type="submit" class="secondary">Сформировать дневной отчёт</button>
+        </form>
+    </section>
+    {% endif %}
+
+    <section class="card">
+        <h2>Объекты недвижимости</h2>
+        {% if objects %}
+        <table>
+            <thead>
+            <tr>
+                <th>Название</th>
+                <th>Адрес</th>
+                <th>Площадь</th>
+                <th>Статус</th>
+                <th>Ответственный</th>
+                {% if can_manage_records %}<th>Удаление</th>{% endif %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for obj in objects %}
+            <tr>
+                <td>{{ obj.name }}</td>
+                <td>{{ obj.address }}</td>
+                <td>{{ obj.area }}</td>
+                <td>{{ obj.status }}</td>
+                <td>{{ obj.responsible_person or "" }}</td>
+                {% if can_manage_records %}
+                <td>
+                    <form action="{{ url_for('delete_object', object_id=obj.id) }}" method="post" onsubmit="return confirm('Удалить объект? Вместе с ним будут удалены связанные договоры и заявки.');">
+                        <button type="submit" class="danger">Удалить</button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Объекты ещё не добавлены.</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Договоры</h2>
+        {% if contracts %}
+        <table>
+            <thead>
+            <tr>
+                <th>Объект</th>
+                <th>Арендатор</th>
+                <th>№ договора</th>
+                <th>Платёж</th>
+                <th>Срок</th>
+                <th>Статус</th>
+                {% if can_manage_records %}<th>Удаление</th>{% endif %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for contract in contracts %}
+            <tr>
+                <td>{{ contract.objects.name if contract.objects else "" }}</td>
+                <td>{{ contract.tenant_name }}</td>
+                <td>{{ contract.contract_number }}</td>
+                <td>{{ contract.monthly_payment }}</td>
+                <td>{{ contract.start_date }} — {{ contract.end_date }}</td>
+                <td>{{ contract.status }}</td>
+                {% if can_manage_records %}
+                <td>
+                    <form action="{{ url_for('delete_contract', contract_id=contract.id) }}" method="post" onsubmit="return confirm('Удалить договор?');">
+                        <button type="submit" class="danger">Удалить</button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Договоры ещё не добавлены.</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Сформированные отчёты</h2>
+        {% if reports %}
+        <table>
+            <thead>
+            <tr>
+                <th>Файл</th>
+                <th>Тип</th>
+                <th>Создал</th>
+                <th>Дата</th>
+                <th>Ссылка</th>
+                {% if can_manage_reports %}<th>Изменение</th><th>Удаление</th>{% endif %}
+            </tr>
+            </thead>
+            <tbody>
+            {% for report in reports %}
+            <tr>
+                <td>{{ report.file_name }}</td>
+                <td>{{ report.report_type or "" }}</td>
+                <td>{{ report.created_by or "" }}</td>
+                <td>{{ report.created_at[:19].replace("T", " ") if report.created_at else "" }}</td>
+                <td><a href="{{ report.file_url }}" target="_blank">Открыть из облака</a></td>
+                {% if can_manage_reports %}
+                <td>
+                    <form action="{{ url_for('update_report', report_id=report.id) }}" method="post" class="inline-form">
+                        <input type="text" name="report_type" value="{{ report.report_type or 'Дневной отчёт по выполненным заявкам' }}">
+                        <button type="submit">Сохранить</button>
+                    </form>
+                </td>
+                <td>
+                    <form action="{{ url_for('delete_report', report_id=report.id) }}" method="post" onsubmit="return confirm('Удалить отчёт?');">
+                        <button type="submit" class="danger">Удалить</button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Отчёты ещё не сформированы.</p>
+        {% endif %}
+    </section>
+</main>
+</body>
+</html>
