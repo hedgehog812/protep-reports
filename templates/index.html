@@ -209,10 +209,10 @@
 
     {% if can_generate_reports %}
     <section class="card report-card">
-        <h2>Формирование расширенного отчёта</h2>
-        <p>Система формирует Excel-файл со сводкой, объектами, договорами и заявками.</p>
+        <h2>Формирование дневного отчёта</h2>
+        <p>Система формирует Excel-файл по заявкам из колонки «Выполнено», после чего очищает эту колонку Kanban-доски.</p>
         <form action="{{ url_for('generate_report') }}" method="post">
-            <button type="submit" class="secondary">Сформировать расширенный отчёт</button>
+            <button type="submit" class="secondary">Сформировать дневной отчёт</button>
         </form>
     </section>
     {% endif %}
@@ -239,14 +239,13 @@
                 <td>{{ obj.area }}</td>
                 <td>{{ obj.status }}</td>
                 <td>{{ obj.responsible_person or "" }}</td>
-                {% if can_manage_records %}<th>Удаление</th>{% endif %}
-                
-<td>
-    <form action="{{ url_for('delete_object', object_id=obj.id) }}" method="post" onsubmit="return confirm('Удалить объект? Вместе с ним будут удалены связанные договоры и заявки.');">
-        <button type="submit" class="danger">Удалить</button>
-    </form>
-</td>
-{% endif %}
+                {% if can_manage_records %}
+                <td>
+                    <form action="{{ url_for('delete_object', object_id=obj.id) }}" method="post" onsubmit="return confirm('Удалить объект? Вместе с ним будут удалены связанные договоры и заявки.');">
+                        <button type="submit" class="danger">Удалить</button>
+                    </form>
+                </td>
+                {% endif %}
             </tr>
             {% endfor %}
             </tbody>
@@ -268,6 +267,7 @@
                 <th>Платёж</th>
                 <th>Срок</th>
                 <th>Статус</th>
+                {% if can_manage_records %}<th>Удаление</th>{% endif %}
             </tr>
             </thead>
             <tbody>
@@ -280,12 +280,12 @@
                 <td>{{ contract.start_date }} — {{ contract.end_date }}</td>
                 <td>{{ contract.status }}</td>
                 {% if can_manage_records %}
-<td>
-    <form action="{{ url_for('delete_contract', contract_id=contract.id) }}" method="post" onsubmit="return confirm('Удалить договор?');">
-        <button type="submit" class="danger">Удалить</button>
-    </form>
-</td>
-{% endif %}
+                <td>
+                    <form action="{{ url_for('delete_contract', contract_id=contract.id) }}" method="post" onsubmit="return confirm('Удалить договор?');">
+                        <button type="submit" class="danger">Удалить</button>
+                    </form>
+                </td>
+                {% endif %}
             </tr>
             {% endfor %}
             </tbody>
@@ -320,7 +320,7 @@
                 {% if can_manage_reports %}
                 <td>
                     <form action="{{ url_for('update_report', report_id=report.id) }}" method="post" class="inline-form">
-                        <input type="text" name="report_type" value="{{ report.report_type or 'Расширенный отчёт' }}">
+                        <input type="text" name="report_type" value="{{ report.report_type or 'Дневной отчёт по выполненным заявкам' }}">
                         <button type="submit">Сохранить</button>
                     </form>
                 </td>
