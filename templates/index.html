@@ -197,6 +197,10 @@
                             <button type="submit">Сохранить</button>
                         </form>
                     </details>
+
+                    <form action="{{ url_for('delete_request', request_id=req.id) }}" method="post" onsubmit="return confirm('Удалить заявку?');">
+                        <button type="submit" class="danger">Удалить заявку</button>
+                    </form>
                     {% endif %}
                 </div>
                 {% else %}
@@ -228,7 +232,7 @@
                 <th>Площадь</th>
                 <th>Статус</th>
                 <th>Ответственный</th>
-                {% if can_manage_records %}<th>Удаление</th>{% endif %}
+                {% if can_manage_records %}<th>Редактирование</th><th>Удаление</th>{% endif %}
             </tr>
             </thead>
             <tbody>
@@ -240,6 +244,33 @@
                 <td>{{ obj.status }}</td>
                 <td>{{ obj.responsible_person or "" }}</td>
                 {% if can_manage_records %}
+                <td>
+                    <details>
+                        <summary>Редактировать</summary>
+                        <form action="{{ url_for('update_object', object_id=obj.id) }}" method="post" class="form edit-form">
+                            <label>Название
+                                <input type="text" name="name" value="{{ obj.name }}" required>
+                            </label>
+                            <label>Адрес
+                                <input type="text" name="address" value="{{ obj.address }}" required>
+                            </label>
+                            <label>Площадь
+                                <input type="text" name="area" value="{{ obj.area }}" required>
+                            </label>
+                            <label>Статус
+                                <select name="status" required>
+                                    <option value="Свободен" {% if obj.status == "Свободен" %}selected{% endif %}>Свободен</option>
+                                    <option value="В аренде" {% if obj.status == "В аренде" %}selected{% endif %}>В аренде</option>
+                                    <option value="На обслуживании" {% if obj.status == "На обслуживании" %}selected{% endif %}>На обслуживании</option>
+                                </select>
+                            </label>
+                            <label>Ответственный
+                                <input type="text" name="responsible_person" value="{{ obj.responsible_person or '' }}">
+                            </label>
+                            <button type="submit">Сохранить</button>
+                        </form>
+                    </details>
+                </td>
                 <td>
                     <form action="{{ url_for('delete_object', object_id=obj.id) }}" method="post" onsubmit="return confirm('Удалить объект? Вместе с ним будут удалены связанные договоры и заявки.');">
                         <button type="submit" class="danger">Удалить</button>
@@ -267,7 +298,7 @@
                 <th>Платёж</th>
                 <th>Срок</th>
                 <th>Статус</th>
-                {% if can_manage_records %}<th>Удаление</th>{% endif %}
+                {% if can_manage_records %}<th>Редактирование</th><th>Удаление</th>{% endif %}
             </tr>
             </thead>
             <tbody>
@@ -280,6 +311,43 @@
                 <td>{{ contract.start_date }} — {{ contract.end_date }}</td>
                 <td>{{ contract.status }}</td>
                 {% if can_manage_records %}
+                <td>
+                    <details>
+                        <summary>Редактировать</summary>
+                        <form action="{{ url_for('update_contract', contract_id=contract.id) }}" method="post" class="form edit-form">
+                            <label>Объект
+                                <select name="object_id" required>
+                                    {% for obj in objects %}
+                                        <option value="{{ obj.id }}" {% if contract.object_id == obj.id %}selected{% endif %}>{{ obj.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            <label>Арендатор
+                                <input type="text" name="tenant_name" value="{{ contract.tenant_name }}" required>
+                            </label>
+                            <label>Номер договора
+                                <input type="text" name="contract_number" value="{{ contract.contract_number }}" required>
+                            </label>
+                            <label>Платёж
+                                <input type="text" name="monthly_payment" value="{{ contract.monthly_payment }}" required>
+                            </label>
+                            <label>Дата начала
+                                <input type="date" name="start_date" value="{{ contract.start_date }}" required>
+                            </label>
+                            <label>Дата окончания
+                                <input type="date" name="end_date" value="{{ contract.end_date }}" required>
+                            </label>
+                            <label>Статус
+                                <select name="status" required>
+                                    <option value="Действует" {% if contract.status == "Действует" %}selected{% endif %}>Действует</option>
+                                    <option value="Истекает" {% if contract.status == "Истекает" %}selected{% endif %}>Истекает</option>
+                                    <option value="Завершён" {% if contract.status == "Завершён" %}selected{% endif %}>Завершён</option>
+                                </select>
+                            </label>
+                            <button type="submit">Сохранить</button>
+                        </form>
+                    </details>
+                </td>
                 <td>
                     <form action="{{ url_for('delete_contract', contract_id=contract.id) }}" method="post" onsubmit="return confirm('Удалить договор?');">
                         <button type="submit" class="danger">Удалить</button>
