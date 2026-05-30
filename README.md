@@ -1,13 +1,10 @@
-# PROTEP Reports App v3
+Логины
+admin / admin123
+manager / manager123
+user / user123
+Права
+Администратор имеет полный доступ.
 
-Версия с Kanban-доской заявок, ролями `admin/user`, редактированием и закрытием заявок исполнителем, а также удалением отчётов администратором.
+Менеджер может создавать заявки, добавлять объекты, добавлять договоры, формировать отчёты, изменять тип отчёта и удалять отчёты.
 
-Логины:
-- admin / admin123
-- user / user123
-
-Перед обновлением выполните `supabase_schema_v3.sql` в Supabase SQL Editor.
-
-Для Render:
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `gunicorn app:app --bind 0.0.0.0:$PORT`
+Пользователь может изменять статус заявок на Kanban-доске и формировать отчёты.
