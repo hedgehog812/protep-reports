@@ -58,12 +58,12 @@
                 <label>Статус
                     <select name="status" required>
                         <option value="">Выберите статус</option>
-                        <option value="Свободен">Свободен</option>
+                        <option value="В собстваенности">В собстваенности</option>
                         <option value="В аренде">В аренде</option>
-                        <option value="На обслуживании">На обслуживании</option>
+                        <option value="В аресте">В аресте</option>
                     </select>
                 </label>
-                <label>Ответственный
+                <label>Владелец
                     <input type="text" name="responsible_person" placeholder="Иванов И.И.">
                 </label>
                 <button type="submit">Добавить объект</button>
@@ -227,7 +227,7 @@
                 <th>Адрес</th>
                 <th>Площадь</th>
                 <th>Статус</th>
-                <th>Ответственный</th>
+                <th>Владелец</th>
                 {% if can_manage_records %}<th>Удаление</th>{% endif %}
             </tr>
             </thead>
