@@ -58,12 +58,12 @@
                 <label>Статус
                     <select name="status" required>
                         <option value="">Выберите статус</option>
-                        <option value="Свободен">Свободен</option>
+                        <option value="В собственности">В собственности</option>
                         <option value="В аренде">В аренде</option>
-                        <option value="На обслуживании">На обслуживании</option>
+                        <option value="В аресте">В аренде</option>
                     </select>
                 </label>
-                <label>Ответственный
+                <label>Владелец
                     <input type="text" name="responsible_person" placeholder="Иванов И.И.">
                 </label>
                 <button type="submit">Добавить объект</button>
@@ -231,7 +231,7 @@
                 <th>Адрес</th>
                 <th>Площадь</th>
                 <th>Статус</th>
-                <th>Ответственный</th>
+                <th>Владелец</th>
                 {% if can_manage_records %}<th>Редактирование</th><th>Удаление</th>{% endif %}
             </tr>
             </thead>
@@ -259,12 +259,12 @@
                             </label>
                             <label>Статус
                                 <select name="status" required>
-                                    <option value="Свободен" {% if obj.status == "Свободен" %}selected{% endif %}>Свободен</option>
+                                    <option value="В собственности" {% if obj.status == "В собственности" %}selected{% endif %}>В собственности</option>
                                     <option value="В аренде" {% if obj.status == "В аренде" %}selected{% endif %}>В аренде</option>
-                                    <option value="На обслуживании" {% if obj.status == "На обслуживании" %}selected{% endif %}>На обслуживании</option>
+                                    <option value="В аресте" {% if obj.status == "В аресте" %}selected{% endif %}>В аресте</option>
                                 </select>
                             </label>
-                            <label>Ответственный
+                            <label>Владелец
                                 <input type="text" name="responsible_person" value="{{ obj.responsible_person or '' }}">
                             </label>
                             <button type="submit">Сохранить</button>
